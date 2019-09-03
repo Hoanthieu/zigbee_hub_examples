@@ -7,14 +7,42 @@ import uasyncio as asyncio
 from umqtt.simple import MQTTClient
 from micropython import const
 
+
+globalPan = None
+
+def sendMessage(ieeeAddr, msg):
+    #ieeeAddr = nodeid
+    #state is on or off 
+    #id_swicth: index of switch in JAVIS 3 GANG
+    global globalPan
+    state = msg["state"]
+    id_switch = msg["id_switch"]
+    if state == 'ON':
+        payload = [0x11, 0x00, 0x01]
+    elif state == 'OFF':
+        payload = [0x11, 0x00, 0x00]
+    nodeId = ieeeAddr
+    clusterId = 0x0006
+    DstEndpoint = id_switch
+    # DstEndpoint = 0x01 # 0x01、0x02、0x03
+    SrcEndpoint = 0x01
+    return globalPan.sendRawData(
+        nodeId=nodeId,
+        payload=payload,
+        nwkAddr=None,  # use nodeId
+        clusterId=clusterId,
+        DstEndpoint=DstEndpoint,
+        SrcEndpoint=SrcEndpoint
+    )
+
 class MqttClient:
     # User App of Hub SDK, subscribe and publish MQTT messages
 
     # http://www.hivemq.com/demos/websocket-client/
-    MQTT_HOST            = "broker.mqttdashboard.com"
+    MQTT_HOST            = "192.168.1.44"
     MQTT_PORT            = 1883
 
-    UNIQUE_ID            = 'MC30AEA4CC1A40'
+    UNIQUE_ID            = '000B3CFFFEF7EF5C'
     DEFAULT_KEEPALIVE    = const(60)
     KEEP_ALIVE_THRESHOLD = const(5)
 
@@ -25,8 +53,8 @@ class MqttClient:
 
         self.sn = self.UNIQUE_ID
         self.client = None
-        self.topicSubOperation = "%s/operation" % (self.sn) # same as: MC30AEA4CC1A40/operation
-        self.topicPubUpdate    = "%s/update"    % (self.sn) # same as: MC30AEA4CC1A40/update
+        self.topicSubOperation = "%s/switch.1/set" % (self.sn) # same as: MC30AEA4CC1A40/operation
+        self.topicPubUpdate    = "%s/switch.1/state" % (self.sn) # same as: MC30AEA4CC1A40/update
         self.mqttLive = False
         self.log.info('MQTT init')
 
@@ -34,7 +62,7 @@ class MqttClient:
         self.client = MQTTClient(client_id  = self.sn,
                                  server     = self.MQTT_HOST,
                                  port       = self.MQTT_PORT,
-                                 keepalive  = DEFAULT_KEEPALIVE)
+                                 keepalive  = self.DEFAULT_KEEPALIVE)
 
     def _clientConnect(self):
         self.log.debug('MQTT connecting...')
@@ -56,12 +84,12 @@ class MqttClient:
             self.log.exception(e, 'subscribe fail')
 
     def _resetPingTimer(self):
-        self.pingCountdown = DEFAULT_KEEPALIVE
+        self.pingCountdown = self.DEFAULT_KEEPALIVE
 
     def _ping(self):
         ''' do a MQTT ping before keepalive period expires '''
         self.pingCountdown -= 1
-        if self.pingCountdown < KEEP_ALIVE_THRESHOLD:
+        if self.pingCountdown < self.KEEP_ALIVE_THRESHOLD:
             self.log.debug('mqtt ping...')
             self.client.ping()
             self._resetPingTimer()
@@ -83,7 +111,10 @@ class MqttClient:
 
     def publishMsg(self, msg):
         try:
-            topic = self.topicPubUpdate
+            # topic = self.topicPubUpdate
+            topic = self.topicSubOperation
+            #code doan dieu khien thiet bi
+            sendMessage(int(self.UNIQUE_ID, 16), msg)
             self.log.info("publish: topic[%s] msg[%s]", topic, msg)
             self.client.publish(topic=topic, msg=msg, qos=0)
         except Exception as e:
@@ -116,6 +147,8 @@ class App:
     def __init__(self, mgr, loop, pan):
         self.log = logging.getLogger("MQTT")
         self.mc = MqttClient(loop, self.log, self.onMsgReceived)
+        global globalPan
+        globalPan = pan
         self.mc.start()
         loop.create_task(self.taskPublishTest())
 
@@ -125,7 +158,10 @@ class App:
             if not self.mc.mqttIsLive():
                 await asyncio.sleep(1)
             else:
-                msg = { "publishTest": int(utime.time()) }
+                msg = {
+                    "state": "ON",
+                    "id_switch": 1
+                }
                 self.mc.publishMsg(json.dumps(msg))
                 await asyncio.sleep(10)
 

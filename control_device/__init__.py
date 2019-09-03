@@ -9,11 +9,6 @@ from micropython import const
 from core.db_pan_nodes import DBPanNodes
 import picoweb
 
-"""
-App class to connect zigbee device, init a web service, and listen state of device when it change
-WebServer class to get list node of hub, change info of node, control device by a API 
-The Example device is JAVIS 3 GANG SWITCH
-"""
 
 globalPan = None
 displayNodes = DBPanNodes()
@@ -26,13 +21,9 @@ class App:
         self.log = logging.getLogger("APP")
         self.log.setLevel(logging.DEBUG)
         self.log.info('APP init')
-
-        #pan variable can send data to device ==> control
         self.pan = pan
         global globalPan
         globalPan = pan
-
-        #init web server with port 5050
         self.web = WebServer()
         mgr.setSetupPressedCallback(self.onSetupPressed)
         self.pan.setAppNodeJoinCallback(self.onNodeJoin)
@@ -73,10 +64,6 @@ class App:
         self.loop.create_task(self.taskDataReceived(n))  # run a asyncio task
 
     async def taskDataReceived(self, n):
-
-        #data receive using Source Address = Network Address
-        #if the last element of Data array = 0 ==> off, 1==> on
-        #if 'state' not in nodes info, init and change value if have change
         if n.SrcAddr == 0x39F6:  # Javis Switch
             nodes = displayNodes.getPanNodesInfo()
             index = n.SrcEndpoint
@@ -114,9 +101,6 @@ class App:
 
 
 def sendMessage(ieeeAddr, state, id_switch):
-    #ieeeAddr = nodeid
-    #state is on or off 
-    #id_swicth: index of switch in JAVIS 3 GANG
     global globalPan
     if state == 'ON':
         payload = [0x11, 0x00, 0x01]
@@ -136,7 +120,7 @@ def sendMessage(ieeeAddr, state, id_switch):
         SrcEndpoint=SrcEndpoint
     )
 
-#query string parser
+
 def qs_parse(qs):
     parameters = {}
     ampersandSplit = qs.split("&")
@@ -200,7 +184,7 @@ class WebServer():
                 displayNodes = DBPanNodes()
                 nodes = displayNodes.getPanNodesInfo()
                 yield from req.read_form_data()
-                nodeid = int(req.form['nodeid'])
+                nodeid = req.form['nodeid']
                 try:
                     del nodes[nodeid]
                 except:
@@ -221,4 +205,3 @@ class WebServer():
             yield from resp.awrite("Controlled Device " + str(nodeid))
         self.log.info("Running on 0.0.0.0:5050...")
         webapp.run(debug=True, host="0.0.0.0", port=5050)
-
