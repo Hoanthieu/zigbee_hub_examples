@@ -7,23 +7,21 @@ import uasyncio as asyncio
 from umqtt.simple import MQTTClient
 from micropython import const
 
-
 globalPan = None
 
-def sendMessage(ieeeAddr, msg):
+def sendMessage(ieeeAddr, switch_id, msg):
     #ieeeAddr = nodeid
     #state is on or off 
     #id_swicth: index of switch in JAVIS 3 GANG
     global globalPan
-    state = msg["state"]
-    id_switch = msg["id_switch"]
-    if state == 'ON':
+    state = msg
+    if state.upper() == 'ON':
         payload = [0x11, 0x00, 0x01]
-    elif state == 'OFF':
+    elif state.upper() == 'OFF':
         payload = [0x11, 0x00, 0x00]
     nodeId = ieeeAddr
     clusterId = 0x0006
-    DstEndpoint = id_switch
+    DstEndpoint = switch_id
     # DstEndpoint = 0x01 # 0x01、0x02、0x03
     SrcEndpoint = 0x01
     return globalPan.sendRawData(
@@ -53,8 +51,7 @@ class MqttClient:
 
         self.sn = self.UNIQUE_ID
         self.client = None
-        self.topicSubOperation = "%s/switch.1/set" % (self.sn) # same as: MC30AEA4CC1A40/operation
-        self.topicPubUpdate    = "%s/switch.1/state" % (self.sn) # same as: MC30AEA4CC1A40/update
+        self.topicSubOperation = "{}/switch.1/set".format(self.sn) # same as: MC30AEA4CC1A40/operation
         self.mqttLive = False
         self.log.info('MQTT init')
 
@@ -114,7 +111,6 @@ class MqttClient:
             # topic = self.topicPubUpdate
             topic = self.topicSubOperation
             #code doan dieu khien thiet bi
-            sendMessage(int(self.UNIQUE_ID, 16), msg)
             self.log.info("publish: topic[%s] msg[%s]", topic, msg)
             self.client.publish(topic=topic, msg=msg, qos=0)
         except Exception as e:
@@ -147,25 +143,30 @@ class App:
     def __init__(self, mgr, loop, pan):
         self.log = logging.getLogger("MQTT")
         self.mc = MqttClient(loop, self.log, self.onMsgReceived)
+        self.pan = pan
         global globalPan
         globalPan = pan
         self.mc.start()
         loop.create_task(self.taskPublishTest())
 
-    # publish message every 10 seconds
     async def taskPublishTest(self):
         while True:
             if not self.mc.mqttIsLive():
                 await asyncio.sleep(1)
             else:
-                msg = {
-                    "state": "ON",
-                    "id_switch": 1
-                }
-                self.mc.publishMsg(json.dumps(msg))
-                await asyncio.sleep(10)
+                msg = "on"
+                self.mc.publishMsg(msg)
+                await asyncio.sleep(60)
+                
+                msg = "off"
+                self.mc.publishMsg(msg)
+                await asyncio.sleep(60)
+                self.log.info("Done")
 
     def onMsgReceived(self, topic, msg):
         s_topic = topic.decode()
         s_msg = msg.decode()
+        ieeeAddr = s_topic.split("/")[0]
+        switch_id = s_topic.split("/")[1][-1]
+        sendMessage(int(ieeeAddr, 16), int(switch_id), s_msg)
         self.log.info("received: topic[%s] msg[%s]", s_topic, s_msg)
