@@ -147,21 +147,21 @@ class App:
         global globalPan
         globalPan = pan
         self.mc.start()
-        loop.create_task(self.taskPublishTest())
+        self.loop = loop
+    #     loop.create_task(self.taskPublishTest())
 
-    async def taskPublishTest(self):
-        while True:
-            if not self.mc.mqttIsLive():
-                await asyncio.sleep(1)
-            else:
-                msg = "on"
-                self.mc.publishMsg(msg)
-                await asyncio.sleep(60)
-                
-                msg = "off"
-                self.mc.publishMsg(msg)
-                await asyncio.sleep(60)
-                self.log.info("Done")
+    # async def taskPublishTest(self):
+    #     while True:
+    #         if not self.mc.mqttIsLive():
+    #             await asyncio.sleep(1)
+    #         else:
+    #             msg = "on"
+    #             self.mc.publishMsg(msg)
+    #             await asyncio.sleep(60)
+    #             msg = "off"
+    #             self.mc.publishMsg(msg)
+    #             await asyncio.sleep(60)
+    #             self.log.info("Done")
 
     def onMsgReceived(self, topic, msg):
         s_topic = topic.decode()
